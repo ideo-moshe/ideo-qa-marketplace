@@ -1,0 +1,11 @@
+{
+  "name": "ideo-qa-marketplace",
+  "owner": { "name": "IDEO Digital QA" },
+  "plugins": [
+    {
+      "name": "ideo-qa",
+      "description": "File and fix Jira bugs to the team standard, straight from chat. Two skills: ideo-qa:open (new bug) and ideo-qa:align (bring an existing bug to standard).",
+      "source": "./ideo-qa"
+    }
+  ]
+}
