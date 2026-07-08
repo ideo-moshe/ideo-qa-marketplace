@@ -25,6 +25,34 @@ Suspected regressions are filed as separate bugs, linked to the original — sus
 
 - The **Atlassian** connector enabled in Claude, with write access to the DRUS project.
 
+## Install & update (Claude Code)
+
+Marketplace: `ideo-qa-marketplace` · plugin: `ideo-qa`.
+
+**First time** (never installed):
+
+```
+/plugin marketplace add ideo-moshe/ideo-qa-marketplace
+/plugin install ideo-qa@ideo-qa-marketplace
+/reload-plugins
+```
+
+Then the skills are available as `/ideo-qa:open` and `/ideo-qa:align`.
+
+**Pull a new version** (already installed):
+
+```
+/plugin marketplace update ideo-qa-marketplace
+/reload-plugins
+```
+
+⚠️ Third-party marketplaces default to **auto-update OFF**, so `marketplace update` refreshes the metadata but may not bump the installed plugin on its own. Either:
+
+- **Enable auto-update once** — `/plugin` → **Marketplaces** → select `ideo-qa-marketplace` → **Enable auto-update**; after that a `marketplace update` pulls new versions automatically; or
+- **Force it** — `/plugin install ideo-qa@ideo-qa-marketplace` (same scope), then `/reload-plugins`.
+
+Verify the active version in `/plugin` → **Installed** (or `/plugin list`). You can also confirm from Jira: bugs filed by a given version carry that version in the Bug Description footer and the `ideo-qa-open-v<version>` / `ideo-qa-align-v<version>` label.
+
 ## Scope — the Ideo board only
 
 Both skills care about **one board only: the Ideo board, DRUS board 2328.** JQL can't target a board, so every search reproduces its scope: `issuetype = Bug AND (assignee in "Kobi Moshe" (`712020:dd995c71-ac8b-45e1-95e3-193b3b372b28`) / "Moshe Edri" (`712020:8407108d-db7b-40e5-b995-c55689c0b686`) OR assignee is EMPTY)`. Bugs outside that scope belong to other boards and are ignored. (Same scope as the app's `/fix-bugs` skill.)
