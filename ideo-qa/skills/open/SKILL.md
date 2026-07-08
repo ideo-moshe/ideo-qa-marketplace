@@ -9,6 +9,25 @@ A tester describes something they saw — usually informally, often in Hebrew. T
 
 The whole point is a **first-try fix**: a developer (or Claude) reading only this bug should understand the entire problem and fix it without asking questions. The team's working assumption is that if a bug gets reopened because the fix missed, the description wasn't clear or complete enough. So "done" means the bug stands entirely on its own in text.
 
+## Skill version & maintenance
+
+`ideo-qa:open` — **version 0.2.0** · author **Moshe Edri**.
+
+Anyone on the team may edit this skill. **On every change: bump this version (semver), put your own name as author on the line above, and set the same version in `ideo-qa/.claude-plugin/plugin.json`.** Every bug this skill creates is stamped with this skill's name + version + author (see step 7), so any bug can be traced back to the exact skill version that produced it.
+
+## Scope — the Ideo board only
+
+"Bugs" here means the **Ideo board and nothing else** — DRUS board **2328**. JQL can't target a board directly, so reproduce its scope in every search (the duplicate check especially):
+
+```
+issuetype = Bug AND (assignee in (
+  "712020:dd995c71-ac8b-45e1-95e3-193b3b372b28",   /* Kobi Moshe */
+  "712020:8407108d-db7b-40e5-b995-c55689c0b686"    /* Moshe Edri */
+) OR assignee is EMPTY)
+```
+
+Ignore DRUS bugs outside that scope — they belong to other boards and are not ours. Because every new bug is assigned to you, the creator (a board member), it stays on the board (see step 7).
+
 ## The team's bug standard
 
 Every bug must satisfy all of these:
@@ -49,6 +68,7 @@ This project does **not** use Jira's built-in `description` field for bugs — l
 - **`customfield_10104` — "Bug Description"**: the primary field. Your drafted write-up and the `Prompt to Fix` section go here. Treat this as "the description" everywhere below.
 - **`customfield_10138` — "Bug Description Mobile"**: use this when the bug is about mobile, with its own findings and repro steps.
 - **`customfield_10010` — "Sprint"**: new bugs go into the current sprint, **IDEO Sprint 5** (the project's final sprint). Jira sets this by the sprint's numeric **id**, not its name, so resolve the id at runtime (see the create step) — never hardcode a number, since ids differ per sprint.
+- **`customfield_10112` — "Need Release"**: a Yes/No select. Every bug this skill creates sets it to **`{ "value": "No" }`** (see the create step).
 
 Project key is **`DRUS`**, issue type **`Bug`**. (Field IDs are specific to this Jira site; if a create/edit ever reports the field doesn't exist, re-fetch an existing bug with `expand="names"` and match the labels "Bug Description" / "Bug Description Mobile" to their current `customfield_*` IDs.)
 
@@ -72,12 +92,14 @@ If they mention a screenshot, gently remind them the bug must stand on its own i
 ```
 searchJiraIssuesUsingJql(
   cloudId,
-  jql='project = DRUS AND issuetype = Bug AND statusCategory != Done AND (summary ~ "<terms>" OR text ~ "<terms>" OR cf[10104] ~ "<terms>") ORDER BY updated DESC',
+  jql='project = DRUS AND issuetype = Bug AND statusCategory != Done
+       AND (assignee in ("712020:dd995c71-ac8b-45e1-95e3-193b3b372b28", "712020:8407108d-db7b-40e5-b995-c55689c0b686") OR assignee is EMPTY)
+       AND (summary ~ "<terms>" OR text ~ "<terms>" OR cf[10104] ~ "<terms>") ORDER BY updated DESC',
   fields=["summary", "status", "customfield_10104"]
 )
 ```
 
-Read the top few candidates' summary + Bug Description and judge *real* overlap — same page, same element, same symptom, not just shared words. Then:
+The `assignee in (…) OR assignee is EMPTY` clause is the Ideo-board scope (see "Scope — the Ideo board only") — keep it on every search so duplicates are judged only against our board. Read the top few candidates' summary + Bug Description and judge *real* overlap — same page, same element, same symptom, not just shared words. Then:
 - **Likely already covered** → show the tester the match(es) and ask whether their finding is one of them. If yes, don't open a duplicate: switch to aligning that bug (ideo-qa:align), or, if it's the same component and in scope, add the finding to it.
 - **Genuinely new** → say so briefly ("nothing open seems to cover this") and continue.
 
@@ -120,8 +142,11 @@ In this same chat, write a short, direct prompt a developer could paste to Claud
 ### 6. Show the draft and get approval
 **⏸ Stop point 4.** Show the complete bug in chat and ask plainly, e.g. "Ready for me to create this in Jira?" Wait for a clear yes. Revise on request and ask again. Don't create on a partial "looks good but…".
 
-### 7. Create it — straight into Open
-First, **resolve the sprint id.** New bugs belong in the current sprint (IDEO Sprint 5). The Sprint field takes the sprint's numeric id, not its name, so read it off an issue already in the open sprint (once per session):
+### 7. Create it — straight into Open, assigned to you, Need Release = No, provenance-stamped
+First, **resolve two things once per session:**
+
+1. **Your own Jira `accountId`** via `atlassianUserInfo` — every new bug is **assigned to you, the creator**, which also keeps it on the Ideo board.
+2. **The sprint id.** New bugs belong in the current sprint (IDEO Sprint 5). The Sprint field takes the sprint's numeric id, not its name, so read it off an issue already in the open sprint:
 
 ```
 searchJiraIssuesUsingJql(
@@ -134,7 +159,14 @@ searchJiraIssuesUsingJql(
 
 In the returned issue's `customfield_10010` array, take the entry whose `state` is `active` and whose `name` is "IDEO Sprint 5", and use its `id`. If several IDEO sprints are open, match by name. If nothing comes back (e.g. no issue is in the sprint yet), tell the tester and either ask for the sprint or create without it and flag that it needs setting — don't guess an id.
 
-`createJiraIssue` puts custom fields (including the Bug Description and the Sprint) in `additional_fields`; the native `description` param stays unused. Priority and labels also go in `additional_fields`. You can land the bug in Open in the same call via the `transition` parameter:
+Before building the call, append the **provenance stamp** to the end of the Bug Description (after the `Prompt to Fix` section) so the bug records which skill version produced it — matching the "Skill version & maintenance" block above:
+
+```
+---
+_Filed by `ideo-qa:open` v0.2.0 · author: Moshe Edri_
+```
+
+`createJiraIssue` puts custom fields (Bug Description, Sprint, Need Release) in `additional_fields`; the native `description` param stays unused. Priority, labels, and assignee also go in `additional_fields`. Land the bug in Open in the same call via the `transition` parameter:
 
 ```
 getTransitionsForJiraIssue(cloudId, <any bug in this project>)   # find the "Open" transition id, once
@@ -144,15 +176,19 @@ createJiraIssue(
   issueTypeName="Bug",
   summary=<title>,
   additional_fields={
-    "customfield_10104": <full Bug Description incl. Prompt to Fix>,   # markdown; the mobile field is customfield_10138
-    "customfield_10010": <IDEO Sprint 5 id>,                          # numeric sprint id from above
+    "customfield_10104": <full Bug Description incl. Prompt to Fix + provenance stamp>,  # markdown; mobile field is customfield_10138
+    "customfield_10010": <IDEO Sprint 5 id>,        # numeric sprint id from above
+    "customfield_10112": { "value": "No" },         # Need Release — always No
+    "assignee": { "id": <your accountId from atlassianUserInfo> },   # bug is opened on you
     "priority": { "name": <priority> },
-    "labels": [ ... ]
+    "labels": [ "ideo-qa-open-v0-2-0", ... ]         # provenance label: skill + version (bump with the version)
   },
   contentFormat="markdown",
   transition={ "id": <Open transition id> }
 )
 ```
+
+The version in the footer and in the `ideo-qa-open-v…` label must always match this skill's current version (top of file). If `customfield_10112` ("Need Release") is ever reported missing, re-map it via `expand="names"` like the other custom fields.
 
 Two fallbacks: if the custom field rejects markdown (some rich-text fields need Atlassian Document Format), rebuild that value as ADF and retry with `contentFormat="adf"`. If the create screen doesn't expose the Bug Description or Sprint field, create the bug first, then set them with `editJiraIssue(fields={ "customfield_10104": ..., "customfield_10010": <sprint id> })`.
 
@@ -180,8 +216,11 @@ Confirm in plain terms: the key(s) created, the sprint they landed in (IDEO Spri
 - `Prompt to Fix` goes in the Bug Description field (`customfield_10104`), under that exact heading, at the end — never a comment.
 - Same-component findings → description; new defect / new scope / suspected regression → separate bug.
 - Suspicion of regression is enough to split and link.
-- Never create a bug without first searching open DRUS bugs for one that already covers it.
+- Never create a bug without first searching open bugs for one that already covers it — **scoped to the Ideo board** (board 2328: assignee in Kobi Moshe / Moshe Edri, or unassigned). We only track that board.
 - New bugs are set to the current sprint (IDEO Sprint 5) using its resolved numeric id — never a guessed number; if the id can't be resolved, flag it rather than invent one.
+- Every new bug is **assigned to you, the creator** (`assignee` = your accountId from `atlassianUserInfo`) — it's opened on you and stays on the Ideo board.
+- Every new bug sets **Need Release (`customfield_10112`) to `{ "value": "No" }`**.
+- Every new bug is **provenance-stamped** with this skill's name + version + author: the footer line in the Bug Description **and** the `ideo-qa-open-v<version>` label. Bump the version (here + in `plugin.json`) on every edit, and keep the stamp in sync.
 - Output is polished English, **but** keep UI labels, field names, and on-screen text verbatim in Hebrew (quoted, untranslated) — «חיפוש», not "Search". Translating them loses the developer's reference.
 - Always show the draft and get a clear yes before creating in Jira.
 - Don't perform the lead's review; your job ends when the bug is in Open, complete and to standard.

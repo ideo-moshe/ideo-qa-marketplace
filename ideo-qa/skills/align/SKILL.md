@@ -9,6 +9,25 @@ A tester points at a bug that's already in Jira — one key, or a whole batch of
 
 The bar is a **first-try fix**: a developer (or Claude) reading only the rewritten bug should understand the whole problem and fix it without questions. If a bug gets reopened because the fix missed, the assumption is the description wasn't clear or complete enough — so aligning a bug means making it stand entirely on its own in text.
 
+## Skill version & maintenance
+
+`ideo-qa:align` — **version 0.2.0** · author **Moshe Edri**.
+
+Anyone on the team may edit this skill. **On every change: bump this version (semver), put your own name as author on the line above, and set the same version in `ideo-qa/.claude-plugin/plugin.json`.** Every bug this skill updates is stamped with this skill's name + version + author (see step 7), so a bug can be traced to the exact skill version that last aligned it.
+
+## Scope — the Ideo board only
+
+"Bugs" here means the **Ideo board and nothing else** — DRUS board **2328**. JQL can't target a board directly, so reproduce its scope in every search (batch cleanup and the split duplicate check):
+
+```
+issuetype = Bug AND (assignee in (
+  "712020:dd995c71-ac8b-45e1-95e3-193b3b372b28",   /* Kobi Moshe */
+  "712020:8407108d-db7b-40e5-b995-c55689c0b686"    /* Moshe Edri */
+) OR assignee is EMPTY)
+```
+
+Ignore DRUS bugs outside that scope — they belong to other boards and are not ours.
+
 ## The team's bug standard
 
 Measure every bug against all of these:
@@ -111,16 +130,25 @@ In this same chat, write a short, direct prompt a developer could paste to Claud
 **⏸ Stop point 3.** Show the full rewritten bug and ask plainly, e.g. "Ready for me to update `<KEY>` with this?" Wait for a clear yes. Revise on request. Don't update on a partial "looks good but…".
 
 ### 7. Update it, and land it in Open
-Write the rewritten content into the Bug Description field (and the mobile field if the bug has a mobile facet) — not the native `description`:
+First, append the **provenance stamp** to the end of the rewritten Bug Description (after `Prompt to Fix`), matching the "Skill version & maintenance" block above, so the bug records the skill version that last aligned it:
+
+```
+---
+_Aligned by `ideo-qa:align` v0.2.0 · author: Moshe Edri_
+```
+
+If a previous `ideo-qa:*` stamp is already there, replace it with this one rather than stacking. Then write the rewritten content into the Bug Description field (and the mobile field if the bug has a mobile facet) — not the native `description`:
 ```
 editJiraIssue(
   cloudId,
   issueIdOrKey,
-  fields={ "summary": <title>, "customfield_10104": <full Bug Description incl. Prompt to Fix> },
+  fields={ "summary": <title>, "customfield_10104": <full Bug Description incl. Prompt to Fix + provenance stamp> },
   contentFormat="markdown"
 )
 ```
 For a mobile bug, also set `"customfield_10138": <mobile write-up>`. Send content as markdown. If the custom field rejects markdown (some rich-text custom fields need Atlassian Document Format), rebuild that field's value as ADF and retry with `contentFormat="adf"`.
+
+Also add the `ideo-qa-align-v0-2-0` label (matching this version) — read the issue's current `labels` first and write them back **plus** this one, so you don't drop existing labels. The footer version and the label version must always match this skill's version at the top of the file.
 
 Then move it to Open if it isn't already (`transition` is an object):
 ```
@@ -133,23 +161,27 @@ editJiraIssue(cloudId, issueIdOrKey, fields={ "resolution": null })
 ```
 
 ### 8. Batch cleanup (the alignment / יישור קו task)
-For "get all my open bugs to standard", find them, then handle **one at a time with approval each** — never bulk-edit silently:
+For "get all my open bugs to standard", find them **within the Ideo board scope**, then handle **one at a time with approval each** — never bulk-edit silently:
 ```
 searchJiraIssuesUsingJql(
   cloudId,
-  jql="project = <KEY> AND type = Bug AND status = Open ORDER BY created DESC",
+  jql='project = DRUS AND issuetype = Bug AND status = Open
+       AND (assignee in ("712020:dd995c71-ac8b-45e1-95e3-193b3b372b28", "712020:8407108d-db7b-40e5-b995-c55689c0b686") OR assignee is EMPTY)
+       ORDER BY created DESC',
   fields=["summary", "status"]
 )
 ```
-Show the list first and confirm scope before working through it.
+Show the list first and confirm scope before working through it. Never align a bug outside the Ideo board — those belong to other boards.
 
 ### 9. Split & link regressions
-For a split, each *new* bug you'd spin off gets the duplicate check first (**Stop point 2**): before creating it, search DRUS's open bugs for the same issue and confirm with the tester it isn't already filed —
+For a split, each *new* bug you'd spin off gets the duplicate check first (**Stop point 2**): before creating it, search the Ideo board's open bugs for the same issue and confirm with the tester it isn't already filed —
 
 ```
 searchJiraIssuesUsingJql(
   cloudId,
-  jql='project = DRUS AND issuetype = Bug AND statusCategory != Done AND (summary ~ "<terms>" OR text ~ "<terms>" OR cf[10104] ~ "<terms>") ORDER BY updated DESC',
+  jql='project = DRUS AND issuetype = Bug AND statusCategory != Done
+       AND (assignee in ("712020:dd995c71-ac8b-45e1-95e3-193b3b372b28", "712020:8407108d-db7b-40e5-b995-c55689c0b686") OR assignee is EMPTY)
+       AND (summary ~ "<terms>" OR text ~ "<terms>" OR cf[10104] ~ "<terms>") ORDER BY updated DESC',
   fields=["summary", "status", "customfield_10104"]
 )
 ```
@@ -169,7 +201,9 @@ Confirm in plain terms: which key(s) you updated, that they're in Open awaiting 
 - `Prompt to Fix` goes in the Bug Description field (`customfield_10104`), under that exact heading, at the end — never a comment.
 - Never grow a bug through comments; new defect / new scope / suspected regression → separate bug.
 - Suspicion of regression is enough to split and link.
-- Never spin off a new bug without first searching open DRUS bugs for one that already covers it.
+- Only align bugs on the **Ideo board** (board 2328: assignee in Kobi Moshe / Moshe Edri, or unassigned). Every search — batch cleanup and split duplicate checks — is scoped to that board; never touch a bug outside it.
+- Never spin off a new bug without first searching the Ideo board's open bugs for one that already covers it.
+- Every aligned bug is **provenance-stamped** with this skill's name + version + author: the footer line in the Bug Description **and** the `ideo-qa-align-v<version>` label (preserve existing labels). Bump the version (here + in `plugin.json`) on every edit, and keep the stamp in sync.
 - Output is polished English, **but** keep UI labels, field names, and on-screen text verbatim in Hebrew (quoted, untranslated) — «חיפוש», not "Search". Translating them loses the developer's reference.
 - Always show the rewrite and get a clear yes before updating Jira — one confirmation per bug, even in batch.
 - Read issues with a narrow field list.

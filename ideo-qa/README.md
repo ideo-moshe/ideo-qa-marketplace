@@ -25,13 +25,26 @@ Suspected regressions are filed as separate bugs, linked to the original — sus
 
 - The **Atlassian** connector enabled in Claude, with write access to the DRUS project.
 
+## Scope — the Ideo board only
+
+Both skills care about **one board only: the Ideo board, DRUS board 2328.** JQL can't target a board, so every search reproduces its scope: `issuetype = Bug AND (assignee in "Kobi Moshe" (`712020:dd995c71-ac8b-45e1-95e3-193b3b372b28`) / "Moshe Edri" (`712020:8407108d-db7b-40e5-b995-c55689c0b686`) OR assignee is EMPTY)`. Bugs outside that scope belong to other boards and are ignored. (Same scope as the app's `/fix-bugs` skill.)
+
 ## DRUS specifics (hardcoded in both skills)
 
 - Project key **`DRUS`**, issue type **`Bug`**.
-- Bug content lives in custom fields, not the native `description` (which stays empty): **`customfield_10104` = "Bug Description"** (primary; holds the write-up and the Prompt to Fix) and **`customfield_10138` = "Bug Description Mobile"** (mobile facet). Both skills read/write these.
-- If field IDs ever change, re-fetch a bug with `expand="names"` and re-map the "Bug Description" / "Bug Description Mobile" labels.
+- Bug content lives in custom fields, not the native `description` (which stays empty): **`customfield_10104` = "Bug Description"** (primary; holds the write-up, the Prompt to Fix, and the provenance stamp) and **`customfield_10138` = "Bug Description Mobile"** (mobile facet). Both skills read/write these.
+- **`customfield_10112` = "Need Release"** (Yes/No): `open` sets every new bug to **No**.
+- **`customfield_10010` = "Sprint"**: new bugs go to the current sprint (IDEO Sprint 5), resolved by id at runtime.
+- New bugs are **assigned to the creator** (`assignee` = the runner's accountId from `atlassianUserInfo`), which keeps them on the Ideo board.
+- If field IDs ever change, re-fetch a bug with `expand="names"` and re-map the labels.
+
+## Skill versioning & provenance
+
+- Each skill carries its own **`version` + `author`** in the "Skill version & maintenance" block at the top of its `SKILL.md`. Anyone may edit a skill; **on every change, bump that version (semver), set your name as author, and match the version in `.claude-plugin/plugin.json`.**
+- Every bug a skill writes is **provenance-stamped** so it traces back to the exact skill version that produced it: a footer line in the Bug Description (e.g. `Filed by ideo-qa:open v0.2.0 · author: …`) **and** a queryable Jira label (`ideo-qa-open-v0-2-0` / `ideo-qa-align-v0-2-0`). Filter bugs by that label to find everything a given skill version created.
 
 ## Notes for maintainers
 
 - The standard is duplicated inside each skill's `SKILL.md` on purpose, so each skill runs self-contained. If it changes, update both `skills/open/SKILL.md` and `skills/align/SKILL.md`.
+- The Ideo-board scope, the DRUS field IDs, and the version stamp are duplicated in both skills too — keep them in sync.
 - Still open for this team: (1) whether automation rewrites the Bug Description custom fields — if so, the Prompt-to-Fix-in-field rule needs revisiting; (2) the exact "Open" status/transition name to hardcode the transition id.
