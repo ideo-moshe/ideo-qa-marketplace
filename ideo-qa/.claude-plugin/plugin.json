@@ -1,6 +1,6 @@
 {
   "name": "ideo-qa",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "QA bug workflow for testers working entirely in chat: file new bugs and bring existing ones up to the team's bug-quality standard, written straight into Jira via the Atlassian connector. No codebase or CLI required.",
   "author": {
     "name": "IDEO Digital QA"

@@ -11,7 +11,7 @@ The whole point is a **first-try fix**: a developer (or Claude) reading only thi
 
 ## Skill version & maintenance
 
-`ideo-qa:open` — **version 0.2.0** · author **Moshe Edri**.
+`ideo-qa:open` — **version 0.3.0** · author **Moshe Edri**.
 
 Anyone on the team may edit this skill. **On every change: bump this version (semver), put your own name as author on the line above, and set the same version in `ideo-qa/.claude-plugin/plugin.json`.** Every bug this skill creates is stamped with this skill's name + version + author (see step 7), so any bug can be traced back to the exact skill version that produced it.
 
@@ -35,7 +35,9 @@ Every bug must satisfy all of these:
 1. **Title and description carry the full scope.** The summary and description together reflect the complete amount of work. Nothing essential lives anywhere else.
 2. **No scope creep through comments.** Never grow a bug with comments. Same-component findings fold into the description; a different defect or new scope is a separate bug.
 3. **Every finding is listed, each with its own repro steps.** An explicit itemized list of everything to fix. Each item gets clear, complete, self-contained steps — numbered, from a known starting state to the observed wrong behavior plus what was expected.
-4. **Screenshots illustrate, they don't inform.** Assume the reader can't see images. Every detail needed to understand or reproduce the bug is written in text. Screenshots are extra, never a substitute.
+4. **Screenshots illustrate, they don't inform — and they never carry the element's identity or the design source.** Assume the reader can't see images. Every detail needed to understand, locate, or reproduce the bug is written in text; screenshots are extra, never a substitute. Two things in particular must be in words, never left to a picture — each has cost a real bug:
+   - **The exact element.** Name it unambiguously — its on-screen label / `aria-label`, or a CSS selector — plus the precise screen and state (route or overlay, empty vs filled, focused vs at-rest). "the × near the «אזור» field" is **not** enough: on DRUS-3822 that ambiguity made two developers resize the *wrong* × (the field's clear icon) instead of the real target (the search-overlay close button, `hero-shell` `.closeBtnMobile`, `aria-label` «סגור»). Write the element so a developer can `document.querySelector` it.
+   - **The Figma source, as a node-id.** Any claim about expected size, spacing, color, or layout cites the design **in text**: the Figma **file key + node-id** of the frame that defines the expected state — e.g. «Expected per Figma `TG4LDbDtMnHCa7CDHNljsA` → frame "iPhone 13 & 14 - 85", node `3522:94953`: close × is 13×13». A screenshot of Figma is **not** a citation; paste the node-id so the developer opens the *same* frame instead of guessing (and can confirm it's the current design, not a superseded one). If a node-id can't be produced, the expected value isn't verifiable — treat it as a blocker, not an optional extra.
 5. **Polished English — but UI strings stay verbatim.** Testers may write in Hebrew or rough English; the bug that gets created is clean, professional English. The one exception: literal on-screen text — field names, button and menu labels, tab names, exact values, error messages — is kept **verbatim in its original language (usually Hebrew), in quotes, never translated.** The field is «חיפוש», not "Search"; a developer matches against the real label, and translating it loses that reference. A short English gloss in parentheses is fine on first mention (e.g. «חיפוש» (the free-text search field)), but the Hebrew literal is the canonical reference.
 6. **New bugs land in the "Open" column.** That's where the lead reviews them before work starts. You create the bug in Open and hand off — the review is a human step, not yours.
 7. **Two closing checks, in this same chat, in order** — the plain-language gate, then the Prompt to Fix (both detailed in the workflow below).
@@ -82,7 +84,7 @@ Call `getAccessibleAtlassianResources` a single time for the `cloudId`; reuse it
 ### 1. Gather the finding
 Turn informal notes into a complete finding — pull from what they gave you first, ask only about what's genuinely missing. For each distinct defect you need: what's wrong (observed), what should happen (expected), where (page/screen/component, environment, relevant account or state), and clean steps from a known start to the wrong behavior.
 
-If they mention a screenshot, gently remind them the bug must stand on its own in text, and ask them to describe in words whatever it showed (error text, which field, which value).
+If they mention a screenshot, gently remind them the bug must stand on its own in text, and ask them to describe in words whatever it showed (error text, which field, which value). For any visual/appearance finding, this is where you capture the two things a picture can't carry (standard #4): the **exact element** (its label / `aria-label` or a CSS selector, plus screen + state) and the **Figma node-id** of the frame that defines the expected result. If they can't produce a node-id, tell them the expected value can't be verified and help them get one before you draft — don't file an appearance bug whose "expected" lives only in an image.
 
 **⏸ Stop point 1 — before splitting.** If the notes look like more than one bug, a regression, or out-of-scope work, apply the split rules now: present the proposed split and wait for the tester's agreement before you draft anything.
 
@@ -163,7 +165,7 @@ Before building the call, append the **provenance stamp** to the end of the Bug 
 
 ```
 ---
-_Filed by `ideo-qa:open` v0.2.0 · author: Moshe Edri_
+_Filed by `ideo-qa:open` v0.3.0 · author: Moshe Edri_
 ```
 
 `createJiraIssue` puts custom fields (Bug Description, Sprint, Need Release) in `additional_fields`; the native `description` param stays unused. Priority, labels, and assignee also go in `additional_fields`. Land the bug in Open in the same call via the `transition` parameter:
@@ -181,7 +183,7 @@ createJiraIssue(
     "customfield_10112": { "value": "No" },         # Need Release — always No
     "assignee": { "id": <your accountId from atlassianUserInfo> },   # bug is opened on you
     "priority": { "name": <priority> },
-    "labels": [ "ideo-qa-open-v0-2-0", ... ]         # provenance label: skill + version (bump with the version)
+    "labels": [ "ideo-qa-open-v0-3-0", ... ]         # provenance label: skill + version (bump with the version)
   },
   contentFormat="markdown",
   transition={ "id": <Open transition id> }
